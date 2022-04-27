@@ -1,0 +1,6 @@
+{
+  "solidity.compileUsingRemoteVersion": "latest",
+  "[solidity]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
