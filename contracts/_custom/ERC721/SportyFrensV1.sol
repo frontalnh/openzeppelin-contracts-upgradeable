@@ -6,16 +6,20 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721BurnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 
-contract SportyFrens is
+contract SportyFrensV1 is
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
+    ERC721Upgradeable,
     ERC721BurnableUpgradeable,
-    ERC721EnumerableUpgradeable,
+    ERC721EnumerableUpgradeable
 {
     uint256 public maxPerAddressDuringMint;
     uint256 public amountForDevs;
-    uint256 public amountForAuctionAndDev;
+    uint256 public collectionSize;
+    uint256 private _batchSize;
+    mapping(address => uint256) public numberMinted;
 
     struct PreSaleConfig {
         bool open;
@@ -46,18 +50,28 @@ contract SportyFrens is
     PublicSaleConfig public publicSaleConfig;
     AllowlistSaleConfig public allowlistSaleConfig;
 
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
     function initialize(
-        uint256 _maxBatchSize_,
-        uint256 _collectionSize_,
-        uint256 amountForAuctionAndDev_,
+        string memory name_,
+        string memory symbol_,
+        uint256 batchSize_,
+        uint256 collectionSize_,
         uint256 amountForDevs_
     ) public {
-        __ERC721AUpgradable_init("Azuki", "AZUKI", _maxBatchSize_, _collectionSize_);
+        __ERC721_init(name_, symbol_);
         __ReentrancyGuard_init();
-        maxPerAddressDuringMint = _maxBatchSize_;
-        amountForAuctionAndDev = amountForAuctionAndDev_;
+        collectionSize = collectionSize_;
+        _batchSize = batchSize_;
         amountForDevs = amountForDevs_;
-        require(amountForAuctionAndDev_ <= _collectionSize_, "larger collection size needed");
+        require(amountForDevs_ <= collectionSize_, "larger collection size needed");
     }
 
     modifier callerIsUser() {
@@ -69,7 +83,7 @@ contract SportyFrens is
         uint256 price = uint256(allowlistSaleConfig.price);
         require(price != 0, "allowlist sale has not begun yet");
         require(allowlistSaleConfig.allowlist[msg.sender] > 0, "not eligible for allowlist mint");
-        require(totalSupply() + 1 <= _collectionSize, "reached max supply");
+        require(totalSupply() + 1 <= collectionSize, "reached max supply");
         allowlistSaleConfig.allowlist[msg.sender]--;
         _safeMint(msg.sender, 1);
         _refundIfOver(price);
@@ -83,8 +97,8 @@ contract SportyFrens is
         require(publicSaleKey == callerPublicSaleKey, "called with incorrect public sale key");
 
         require(isPublicSaleOn(publicPrice, publicSaleKey, publicSaleStartTime), "public sale has not begun yet");
-        require(totalSupply() + quantity <= _collectionSize, "reached max supply");
-        require(numberMinted(msg.sender) + quantity <= maxPerAddressDuringMint, "can not mint this many");
+        require(totalSupply() + quantity <= collectionSize, "reached max supply");
+        require(numberMinted[msg.sender] + quantity <= maxPerAddressDuringMint, "can not mint this many");
         _safeMint(msg.sender, quantity);
         _refundIfOver(publicPrice * quantity);
     }
@@ -118,10 +132,10 @@ contract SportyFrens is
     // For marketing etc.
     function devMint(uint256 quantity) external onlyOwner {
         require(totalSupply() + quantity <= amountForDevs, "too many already minted before dev mint");
-        require(quantity % _maxBatchSize == 0, "can only mint a multiple of the _maxBatchSize");
-        uint256 numChunks = quantity / _maxBatchSize;
+        require(quantity % _batchSize == 0, "can only mint a multiple of the _batchSize");
+        uint256 numChunks = quantity / _batchSize;
         for (uint256 i = 0; i < numChunks; i++) {
-            _safeMint(msg.sender, _maxBatchSize);
+            _safeMint(msg.sender, _batchSize);
         }
     }
 
@@ -141,15 +155,9 @@ contract SportyFrens is
         require(success, "Transfer failed.");
     }
 
-    function setOwnersExplicit(uint256 quantity) external onlyOwner nonReentrant {
-        _setOwnersExplicit(quantity);
-    }
-
-    function numberMinted(address owner) public view returns (uint256) {
-        return _numberMinted(owner);
-    }
-
-    function getOwnershipData(uint256 tokenId) external view returns (TokenOwnership memory) {
-        return _ownershipOf(tokenId);
-    }
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override(ERC721Upgradeable, ERC721EnumerableUpgradeable) {}
 }
